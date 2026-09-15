@@ -1,8 +1,16 @@
 // ==UserScript==
-// @name         MW Idle 空闲自动采集
+// @name         MW Idle Auto Triple Gather
+// @name:en      MW Idle Auto Triple Gather
+// @name:zh      MW Idle 空闲自动三采
+// @name:zh-CN   MW Idle 空闲自动三采
+// @name:zh-TW   MW Idle 空閒自動三採
 // @namespace    mwidle-auto
-// @version      2.4.0
-// @description  无所事事时自动执行自选动作（挤奶/采集/伐木）和目标（如奥秘树）。监听游戏空闲状态，并尝试挂钩 MWITools / 页面通知。
+// @version      2.5.0
+// @description  When idle, auto-start a chosen gathering action (Milking / Foraging / Woodcutting) and target.
+// @description:en  When idle, auto-start a chosen gathering action (Milking / Foraging / Woodcutting) and target.
+// @description:zh  无所事事时自动执行自选三采动作（挤奶/采集/伐木）和目标。界面支持简体、繁体、English。
+// @description:zh-CN 无所事事时自动执行自选三采动作（挤奶/采集/伐木）和目标。界面支持简体、繁体、English。
+// @description:zh-TW 無所事事時自動執行自選三採動作（擠奶/採集/伐木）和目標。介面支援簡體、繁體、English。
 // @author       based on Jireh
 // @match        https://www.milkywayidle.com/*
 // @match        https://test.milkywayidle.com/*
@@ -19,61 +27,299 @@
 (function () {
     'use strict';
 
+    const VERSION = '2.5.0';
     const STORAGE_KEY = 'mwidle-auto-gather-config-v2';
     const CLICK_DELAY_MS = 900;
     const RUN_COOLDOWN_MS = 8000;
     const POLL_INTERVAL_MS = 30 * 1000;
 
+    const I18N = {
+        en: {
+            title: 'Idle Triple Gather',
+            enable: 'Enable (run when idle)',
+            skill: 'Action',
+            target: 'Target',
+            infinite: 'Infinite count [\u221e]',
+            keepalive: 'Keep alive in background (can start while the tab is hidden)',
+            run: 'Run once now',
+            running: 'Running\u2026',
+            language: 'Language',
+            'locale.auto': 'Auto',
+            'locale.en': 'English',
+            'locale.zh-CN': '简体中文',
+            'locale.zh-TW': '繁體中文',
+            tip: 'Background tabs are throttled. Enable keep-alive and click the game once. The script watches action completion, so you do not need to switch back.',
+            waitLoad: 'Waiting for the game to load',
+            executing: 'Starting the default action\u2026',
+            trigger: 'Triggered by: {reason}',
+            started: 'Started: {skill} / {target}',
+            success: 'Started successfully',
+            fail: 'Failed',
+            saved: 'Saved: {skill} / {target}',
+            visibleCards: 'Visible skill cards: {n}{list}',
+            clickCard: 'Clicked card: {name}',
+            clickName: 'Clicked name: {alias}',
+            alreadyInfinite: 'Count is already infinite',
+            clickedInfinite: 'Clicked infinite count',
+            clickBtn: 'Clicked button: {text} ({width}px)',
+            usedGameClick: 'Started with the in-game button handler',
+            noBtnEvent: 'Could not reach the button handler; start may fail',
+            startAlreadyOpen: 'Start button is already on the correct dialog',
+            foundCore: 'Found game core',
+            noCore: 'Game core not found',
+            openedViaApi: 'Opened {label} {hrid}',
+            apiError: 'Game open API threw an error',
+            gotStart: 'Start button appeared',
+            apiNoStart: 'API was called, but the Start button did not appear',
+            onSkillPage: 'Already on the {skill} page',
+            clickedNav: 'Clicked sidebar: {skill}',
+            navMiss: 'Could not click sidebar "{skill}"',
+            startAction: 'Starting: {skill} \u2192 {target}',
+            errNoCard: 'Target card not found: {label}',
+            errNoStartAfterClick: 'Clicked {label}, but the Start button did not appear',
+            errNoStart: 'Start button not found',
+            errStartClickFail: 'Found the Start button but the click failed',
+            errStillIdle: 'Clicked Start, but the header is still "{header}", not {label}',
+            'skill.milking': 'Milking',
+            'skill.foraging': 'Foraging',
+            'skill.woodcutting': 'Woodcutting',
+            'target.milking.cow': 'Cow',
+            'target.milking.verdant_cow': 'Verdant Cow',
+            'target.milking.azure_cow': 'Azure Cow',
+            'target.milking.burble_cow': 'Burble Cow',
+            'target.milking.crimson_cow': 'Crimson Cow',
+            'target.milking.unicow': 'Unicow',
+            'target.milking.holy_cow': 'Holy Cow',
+            'target.foraging.farmland': 'Farmland',
+            'target.foraging.shimmering_lake': 'Shimmering Lake',
+            'target.foraging.misty_forest': 'Misty Forest',
+            'target.foraging.burble_beach': 'Burble Beach',
+            'target.foraging.silly_cow_valley': 'Silly Cow Valley',
+            'target.foraging.olympus_mons': 'Olympus Mons',
+            'target.foraging.asteroid_belt': 'Asteroid Belt',
+            'target.woodcutting.tree': 'Tree',
+            'target.woodcutting.birch_tree': 'Birch Tree',
+            'target.woodcutting.cedar_tree': 'Cedar Tree',
+            'target.woodcutting.purpleheart_tree': 'Purpleheart Tree',
+            'target.woodcutting.ginkgo_tree': 'Ginkgo Tree',
+            'target.woodcutting.redwood_tree': 'Redwood Tree',
+            'target.woodcutting.arcane_tree': 'Arcane Tree',
+            'reason.websocket-empty-queue': 'empty action queue',
+            'reason.worker-tick': 'background timer',
+            'reason.dom-idle': 'idle in the header',
+            'reason.tab-visible': 'tab became visible',
+            'reason.tab-hidden': 'tab went to background',
+            'reason.poll': 'periodic check',
+            'reason.startup': 'startup',
+            'reason.manual': 'manual'
+        },
+        'zh-CN': {
+            title: '空闲自动三采',
+            enable: '启用（无所事事时自动执行）',
+            skill: '动作',
+            target: '目标',
+            infinite: '无限次数 [\u221e]',
+            keepalive: '后台保活（离开页面也能自动开始）',
+            run: '立即执行一次',
+            running: '执行中\u2026',
+            language: '语言',
+            'locale.auto': '自动',
+            'locale.en': 'English',
+            'locale.zh-CN': '简体中文',
+            'locale.zh-TW': '繁體中文',
+            tip: '后台标签会被浏览器节流。请勾选「后台保活」，并在游戏页点击一次。脚本会监听动作完成，不必切回页面。',
+            waitLoad: '等待游戏加载',
+            executing: '正在执行默认动作\u2026',
+            trigger: '触发来源：{reason}',
+            started: '已开始：{skill} / {target}',
+            success: '执行成功',
+            fail: '执行失败',
+            saved: '已保存：{skill} / {target}',
+            visibleCards: '可见技能卡 {n} 张{list}',
+            clickCard: '点击卡片：{name}',
+            clickName: '点击名称：{alias}',
+            alreadyInfinite: '次数已是无限',
+            clickedInfinite: '已点无限次数',
+            clickBtn: '点击按钮：{text} ({width}px)',
+            usedGameClick: '已用游戏按钮事件开始',
+            noBtnEvent: '未取到按钮事件，开始可能失败',
+            startAlreadyOpen: '开始按钮已在正确弹窗上',
+            foundCore: '已找到游戏核心',
+            noCore: '未找到游戏核心',
+            openedViaApi: '已调用打开：{label} {hrid}',
+            apiError: '游戏打开接口报错',
+            gotStart: '已等到开始按钮',
+            apiNoStart: '接口已调用，但没出现开始按钮',
+            onSkillPage: '已在{skill}页',
+            clickedNav: '已点侧栏：{skill}',
+            navMiss: '未点到侧栏「{skill}」',
+            startAction: '开始执行：{skill} \u2192 {target}',
+            errNoCard: '未找到目标卡片：{label}',
+            errNoStartAfterClick: '已点{label}，但没等到开始按钮',
+            errNoStart: '没有开始按钮',
+            errStartClickFail: '找到过开始按钮但点击失败',
+            errStillIdle: '点了开始，但顶部仍是「{header}」，不是{label}',
+            'skill.milking': '挤奶',
+            'skill.foraging': '采集',
+            'skill.woodcutting': '伐木',
+            'target.milking.cow': '奶牛',
+            'target.milking.verdant_cow': '翠绿奶牛',
+            'target.milking.azure_cow': '蔚蓝奶牛',
+            'target.milking.burble_cow': '深紫奶牛',
+            'target.milking.crimson_cow': '绛红奶牛',
+            'target.milking.unicow': '彩虹奶牛',
+            'target.milking.holy_cow': '神圣奶牛',
+            'target.foraging.farmland': '翠野农场',
+            'target.foraging.shimmering_lake': '波光湖泊',
+            'target.foraging.misty_forest': '迷失森林',
+            'target.foraging.burble_beach': '深紫沙滩',
+            'target.foraging.silly_cow_valley': '傻牛山谷',
+            'target.foraging.olympus_mons': '奥林匹斯山',
+            'target.foraging.asteroid_belt': '小行星带',
+            'target.woodcutting.tree': '树',
+            'target.woodcutting.birch_tree': '桦树',
+            'target.woodcutting.cedar_tree': '雪松树',
+            'target.woodcutting.purpleheart_tree': '紫心树',
+            'target.woodcutting.ginkgo_tree': '银杏树',
+            'target.woodcutting.redwood_tree': '红杉树',
+            'target.woodcutting.arcane_tree': '奥秘树',
+            'reason.websocket-empty-queue': '动作队列清空',
+            'reason.worker-tick': '后台计时',
+            'reason.dom-idle': '顶部显示无所事事',
+            'reason.tab-visible': '切回游戏页',
+            'reason.tab-hidden': '切到后台',
+            'reason.poll': '定时检查',
+            'reason.startup': '启动',
+            'reason.manual': '手动'
+        },
+        'zh-TW': {
+            title: '空閒自動三採',
+            enable: '啟用（無所事事時自動執行）',
+            skill: '動作',
+            target: '目標',
+            infinite: '無限次數 [\u221e]',
+            keepalive: '背景保活（離開頁面也能自動開始）',
+            run: '立即執行一次',
+            running: '執行中\u2026',
+            language: '語言',
+            'locale.auto': '自動',
+            'locale.en': 'English',
+            'locale.zh-CN': '简体中文',
+            'locale.zh-TW': '繁體中文',
+            tip: '背景分頁會被瀏覽器節流。請勾選「背景保活」，並在遊戲頁點擊一次。腳本會監聽動作完成，不必切回頁面。',
+            waitLoad: '等待遊戲載入',
+            executing: '正在執行預設動作\u2026',
+            trigger: '觸發來源：{reason}',
+            started: '已開始：{skill} / {target}',
+            success: '執行成功',
+            fail: '執行失敗',
+            saved: '已儲存：{skill} / {target}',
+            visibleCards: '可見技能卡 {n} 張{list}',
+            clickCard: '點擊卡片：{name}',
+            clickName: '點擊名稱：{alias}',
+            alreadyInfinite: '次數已是無限',
+            clickedInfinite: '已點無限次數',
+            clickBtn: '點擊按鈕：{text} ({width}px)',
+            usedGameClick: '已用遊戲按鈕事件開始',
+            noBtnEvent: '未取得按鈕事件，開始可能失敗',
+            startAlreadyOpen: '開始按鈕已在正確彈窗上',
+            foundCore: '已找到遊戲核心',
+            noCore: '未找到遊戲核心',
+            openedViaApi: '已呼叫開啟：{label} {hrid}',
+            apiError: '遊戲開啟介面報錯',
+            gotStart: '已等到開始按鈕',
+            apiNoStart: '介面已呼叫，但沒出現開始按鈕',
+            onSkillPage: '已在{skill}頁',
+            clickedNav: '已點側欄：{skill}',
+            navMiss: '未點到側欄「{skill}」',
+            startAction: '開始執行：{skill} \u2192 {target}',
+            errNoCard: '未找到目標卡片：{label}',
+            errNoStartAfterClick: '已點{label}，但沒等到開始按鈕',
+            errNoStart: '沒有開始按鈕',
+            errStartClickFail: '找到過開始按鈕但點擊失敗',
+            errStillIdle: '點了開始，但頂部仍是「{header}」，不是{label}',
+            'skill.milking': '擠奶',
+            'skill.foraging': '採集',
+            'skill.woodcutting': '伐木',
+            'target.milking.cow': '奶牛',
+            'target.milking.verdant_cow': '翠綠奶牛',
+            'target.milking.azure_cow': '蔚藍奶牛',
+            'target.milking.burble_cow': '深紫奶牛',
+            'target.milking.crimson_cow': '絳紅奶牛',
+            'target.milking.unicow': '彩虹奶牛',
+            'target.milking.holy_cow': '神聖奶牛',
+            'target.foraging.farmland': '翠野農場',
+            'target.foraging.shimmering_lake': '波光湖泊',
+            'target.foraging.misty_forest': '迷失森林',
+            'target.foraging.burble_beach': '深紫沙灘',
+            'target.foraging.silly_cow_valley': '傻牛山谷',
+            'target.foraging.olympus_mons': '奧林匹斯山',
+            'target.foraging.asteroid_belt': '小行星帶',
+            'target.woodcutting.tree': '樹',
+            'target.woodcutting.birch_tree': '樺樹',
+            'target.woodcutting.cedar_tree': '雪松樹',
+            'target.woodcutting.purpleheart_tree': '紫心樹',
+            'target.woodcutting.ginkgo_tree': '銀杏樹',
+            'target.woodcutting.redwood_tree': '紅杉樹',
+            'target.woodcutting.arcane_tree': '奧秘樹',
+            'reason.websocket-empty-queue': '動作佇列清空',
+            'reason.worker-tick': '背景計時',
+            'reason.dom-idle': '頂部顯示無所事事',
+            'reason.tab-visible': '切回遊戲頁',
+            'reason.tab-hidden': '切到背景',
+            'reason.poll': '定時檢查',
+            'reason.startup': '啟動',
+            'reason.manual': '手動'
+        }
+    };
+
     const SKILLS = {
         milking: {
             id: 'milking',
-            label: '挤奶',
             aliases: ['挤奶', '擠奶', 'Milking']
         },
         foraging: {
             id: 'foraging',
-            label: '采集',
             aliases: ['采集', '採集', '采摘', '採摘', 'Foraging']
         },
         woodcutting: {
             id: 'woodcutting',
-            label: '伐木',
             aliases: ['伐木', 'Woodcutting']
         }
     };
 
     const TARGETS = {
         milking: [
-            { id: 'cow', hrid: '/actions/milking/cow', label: '奶牛', aliases: ['奶牛', 'Cow'] },
-            { id: 'verdant_cow', hrid: '/actions/milking/verdant_cow', label: '翠绿奶牛', aliases: ['翠绿奶牛', '翠綠奶牛', 'Verdant Cow'] },
-            { id: 'azure_cow', hrid: '/actions/milking/azure_cow', label: '蔚蓝奶牛', aliases: ['蔚蓝奶牛', '蔚藍奶牛', 'Azure Cow'] },
-            { id: 'burble_cow', hrid: '/actions/milking/burble_cow', label: '深紫奶牛', aliases: ['深紫奶牛', 'Burble Cow'] },
-            { id: 'crimson_cow', hrid: '/actions/milking/crimson_cow', label: '绛红奶牛', aliases: ['绛红奶牛', '絳紅奶牛', '深红奶牛', '深紅奶牛', 'Crimson Cow'] },
-            { id: 'unicow', hrid: '/actions/milking/unicow', label: '彩虹奶牛', aliases: ['彩虹奶牛', 'Unicow'] },
-            { id: 'holy_cow', hrid: '/actions/milking/holy_cow', label: '神圣奶牛', aliases: ['神圣奶牛', '神聖奶牛', '圣牛', '聖牛', 'Holy Cow'] }
+            { id: 'cow', hrid: '/actions/milking/cow', aliases: ['奶牛', 'Cow'] },
+            { id: 'verdant_cow', hrid: '/actions/milking/verdant_cow', aliases: ['翠绿奶牛', '翠綠奶牛', 'Verdant Cow'] },
+            { id: 'azure_cow', hrid: '/actions/milking/azure_cow', aliases: ['蔚蓝奶牛', '蔚藍奶牛', 'Azure Cow'] },
+            { id: 'burble_cow', hrid: '/actions/milking/burble_cow', aliases: ['深紫奶牛', 'Burble Cow'] },
+            { id: 'crimson_cow', hrid: '/actions/milking/crimson_cow', aliases: ['绛红奶牛', '絳紅奶牛', '深红奶牛', '深紅奶牛', 'Crimson Cow'] },
+            { id: 'unicow', hrid: '/actions/milking/unicow', aliases: ['彩虹奶牛', 'Unicow'] },
+            { id: 'holy_cow', hrid: '/actions/milking/holy_cow', aliases: ['神圣奶牛', '神聖奶牛', '圣牛', '聖牛', 'Holy Cow'] }
         ],
         foraging: [
-            { id: 'farmland', hrid: '/actions/foraging/farmland', label: '翠野农场', aliases: ['翠野农场', '翠野農場', '农场', '農場', '农田', '農田', 'Farmland'] },
-            { id: 'shimmering_lake', hrid: '/actions/foraging/shimmering_lake', label: '波光湖泊', aliases: ['波光湖泊', '波光湖', 'Shimmering Lake'] },
-            { id: 'misty_forest', hrid: '/actions/foraging/misty_forest', label: '迷失森林', aliases: ['迷失森林', '迷雾森林', '迷霧森林', 'Misty Forest'] },
-            { id: 'burble_beach', hrid: '/actions/foraging/burble_beach', label: '深紫沙滩', aliases: ['深紫沙滩', '深紫沙灘', 'Burble Beach'] },
-            { id: 'silly_cow_valley', hrid: '/actions/foraging/silly_cow_valley', label: '傻牛山谷', aliases: ['傻牛山谷', '傻牛谷', 'Silly Cow Valley'] },
-            { id: 'olympus_mons', hrid: '/actions/foraging/olympus_mons', label: '奥林匹斯山', aliases: ['奥林匹斯山', '奧林匹斯山', 'Olympus Mons'] },
-            { id: 'asteroid_belt', hrid: '/actions/foraging/asteroid_belt', label: '小行星带', aliases: ['小行星带', '小行星帶', 'Asteroid Belt'] }
+            { id: 'farmland', hrid: '/actions/foraging/farmland', aliases: ['翠野农场', '翠野農場', '农场', '農場', '农田', '農田', 'Farmland'] },
+            { id: 'shimmering_lake', hrid: '/actions/foraging/shimmering_lake', aliases: ['波光湖泊', '波光湖', 'Shimmering Lake'] },
+            { id: 'misty_forest', hrid: '/actions/foraging/misty_forest', aliases: ['迷失森林', '迷雾森林', '迷霧森林', 'Misty Forest'] },
+            { id: 'burble_beach', hrid: '/actions/foraging/burble_beach', aliases: ['深紫沙滩', '深紫沙灘', 'Burble Beach'] },
+            { id: 'silly_cow_valley', hrid: '/actions/foraging/silly_cow_valley', aliases: ['傻牛山谷', '傻牛谷', 'Silly Cow Valley'] },
+            { id: 'olympus_mons', hrid: '/actions/foraging/olympus_mons', aliases: ['奥林匹斯山', '奧林匹斯山', 'Olympus Mons'] },
+            { id: 'asteroid_belt', hrid: '/actions/foraging/asteroid_belt', aliases: ['小行星带', '小行星帶', 'Asteroid Belt'] }
         ],
         woodcutting: [
-            { id: 'tree', hrid: '/actions/woodcutting/tree', label: '树', aliases: ['树', '樹', 'Tree'] },
-            { id: 'birch_tree', hrid: '/actions/woodcutting/birch_tree', label: '桦树', aliases: ['桦树', '樺樹', '白桦', '白樺', '白桦树', '白樺樹', 'Birch Tree'] },
-            { id: 'cedar_tree', hrid: '/actions/woodcutting/cedar_tree', label: '雪松树', aliases: ['雪松树', '雪松樹', 'Cedar Tree'] },
-            { id: 'purpleheart_tree', hrid: '/actions/woodcutting/purpleheart_tree', label: '紫心树', aliases: ['紫心树', '紫心樹', '紫心木', '紫心木树', '紫心木樹', 'Purpleheart Tree'] },
-            { id: 'ginkgo_tree', hrid: '/actions/woodcutting/ginkgo_tree', label: '银杏树', aliases: ['银杏树', '銀杏樹', 'Ginkgo Tree'] },
-            { id: 'redwood_tree', hrid: '/actions/woodcutting/redwood_tree', label: '红杉树', aliases: ['红杉树', '紅杉樹', '红木树', '紅木樹', 'Redwood Tree'] },
-            { id: 'arcane_tree', hrid: '/actions/woodcutting/arcane_tree', label: '奥秘树', aliases: ['奥秘树', '奧秘樹', 'Arcane Tree'] }
+            { id: 'tree', hrid: '/actions/woodcutting/tree', aliases: ['树', '樹', 'Tree'] },
+            { id: 'birch_tree', hrid: '/actions/woodcutting/birch_tree', aliases: ['桦树', '樺樹', '白桦', '白樺', '白桦树', '白樺樹', 'Birch Tree'] },
+            { id: 'cedar_tree', hrid: '/actions/woodcutting/cedar_tree', aliases: ['雪松树', '雪松樹', 'Cedar Tree'] },
+            { id: 'purpleheart_tree', hrid: '/actions/woodcutting/purpleheart_tree', aliases: ['紫心树', '紫心樹', '紫心木', '紫心木树', '紫心木樹', 'Purpleheart Tree'] },
+            { id: 'ginkgo_tree', hrid: '/actions/woodcutting/ginkgo_tree', aliases: ['银杏树', '銀杏樹', 'Ginkgo Tree'] },
+            { id: 'redwood_tree', hrid: '/actions/woodcutting/redwood_tree', aliases: ['红杉树', '紅杉樹', '红木树', '紅木樹', 'Redwood Tree'] },
+            { id: 'arcane_tree', hrid: '/actions/woodcutting/arcane_tree', aliases: ['奥秘树', '奧秘樹', 'Arcane Tree'] }
         ]
     };
 
-    const IDLE_TEXT_RE = /无所事事|無所事事|正在空闲|正在空閒|\bIdle\b/i;
-    const IDLE_NOTIFY_RE = /无所事事|無所事事|动作队列为空|動作隊列為空|動作佇列為空|Action queue is empty|empty action|正在空闲|正在空閒/i;
+    const IDLE_TEXT_RE = /无所事事|無所事事|正在空闲|正在空閒|\bIdle\b|\bIdling\b|Doing nothing/i;
+    const LOCALES = ['en', 'zh-CN', 'zh-TW'];
 
     const DEFAULT_CONFIG = {
         enabled: true,
@@ -84,23 +330,24 @@
             woodcutting: 'arcane_tree'
         },
         infinite: true,
-        hookNotification: true,
         observeIdle: true,
         keepalive: true,
-        collapsed: false
+        collapsed: false,
+        locale: 'auto'
     };
 
     let config = loadConfig();
     let running = false;
     let lastRunAt = 0;
     let lastReason = '';
-    let lastStatus = '等待游戏加载';
+    let lastStatus = '';
     let audioKeepAlive = null;
     let trackedActions = null;
     const ui = { root: null, status: null, log: null };
     let timerWorker = null;
     let sleepWaiters = {};
     let sleepSeq = 0;
+    let localeCache = null;
 
     function loadConfig() {
         try {
@@ -115,6 +362,7 @@
                 merged.keepalive = true;
                 merged.bgKeepaliveMigrated = true;
             }
+            if (!merged.locale) merged.locale = 'auto';
             return merged;
         } catch (e) {
             return { ...DEFAULT_CONFIG, targets: { ...DEFAULT_CONFIG.targets } };
@@ -127,6 +375,79 @@
         } catch (e) {
             // ignore quota / private mode
         }
+    }
+
+    function inferLocaleFromGame() {
+        try {
+            const bits = [];
+            const header = qs('Header_actionName');
+            if (header) bits.push(norm(header.textContent));
+            qsa('NavigationBar_label').forEach(function (el) { bits.push(norm(el.textContent)); });
+            const blob = bits.join(' ');
+            if (!blob) return null;
+            if (/無所事事|正在空閒|擠奶|採集/.test(blob)) return 'zh-TW';
+            if (/无所事事|正在空闲|挤奶|采集/.test(blob)) return 'zh-CN';
+            if (/\bMilking\b|\bForaging\b|\bWoodcutting\b|\bIdle\b/.test(blob)) return 'en';
+        } catch (e) {}
+        return null;
+    }
+
+    function resolveLocale() {
+        const pref = (config && config.locale) || 'auto';
+        if (LOCALES.indexOf(pref) !== -1) return pref;
+        const fromGame = inferLocaleFromGame();
+        if (fromGame) return fromGame;
+        try {
+            if (/idlecn/i.test(location.hostname)) return 'zh-CN';
+        } catch (e) {}
+        const lang = String(
+            (document.documentElement && document.documentElement.lang) ||
+            navigator.language ||
+            navigator.userLanguage ||
+            'en'
+        ).toLowerCase();
+        if (lang.indexOf('zh-tw') === 0 || lang.indexOf('zh-hk') === 0 || lang.indexOf('zh-mo') === 0 || lang.indexOf('hant') !== -1) {
+            return 'zh-TW';
+        }
+        if (lang.indexOf('zh') === 0) return 'zh-CN';
+        return 'en';
+    }
+
+    function getLocale() {
+        if (!localeCache) localeCache = resolveLocale();
+        return localeCache;
+    }
+
+    function invalidateLocale() {
+        localeCache = null;
+    }
+
+    function t(key, vars) {
+        const loc = getLocale();
+        const dict = I18N[loc] || I18N.en;
+        let text = dict[key] || I18N.en[key] || key;
+        if (vars) {
+            Object.keys(vars).forEach(function (name) {
+                text = text.split('{' + name + '}').join(String(vars[name]));
+            });
+        }
+        return text;
+    }
+
+    function skillLabel(skill) {
+        const id = typeof skill === 'string' ? skill : skill.id;
+        return t('skill.' + id);
+    }
+
+    function targetLabel(target) {
+        const id = typeof target === 'string' ? target : target.id;
+        return t('target.' + config.skill + '.' + id);
+    }
+
+    function reasonText(reason) {
+        const key = 'reason.' + reason;
+        const translated = t(key);
+        return translated === key ? String(reason || '') : translated;
     }
 
     function currentSkill() {
@@ -186,33 +507,6 @@
         });
     }
 
-    function fakeClickEvent(el) {
-        return {
-            preventDefault: function () {},
-            stopPropagation: function () {},
-            stopImmediatePropagation: function () {},
-            persist: function () {},
-            nativeEvent: {
-                preventDefault: function () {},
-                stopPropagation: function () {},
-                stopImmediatePropagation: function () {},
-                isTrusted: false,
-                target: el,
-                type: 'click',
-                button: 0
-            },
-            target: el,
-            currentTarget: el,
-            type: 'click',
-            bubbles: false,
-            cancelable: true,
-            button: 0,
-            defaultPrevented: false,
-            isDefaultPrevented: function () { return false; },
-            isPropagationStopped: function () { return true; }
-        };
-    }
-
     function getReactProps(el) {
         if (!el) return null;
         const keys = Reflect.ownKeys(el);
@@ -261,14 +555,6 @@
     function press(el) {
         if (!el || !isVisible(el)) return false;
         if (clickReactButton(el)) return true;
-        return nativeClick(el);
-    }
-
-    function clickOnce(el) {
-        return nativeClick(el);
-    }
-
-    function safeClickElement(el) {
         return nativeClick(el);
     }
 
@@ -356,7 +642,9 @@
     let logLines = [];
     function appendLog(text) {
         if (!ui.log) return;
-        const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        const loc = getLocale();
+        const timeLocale = loc === 'en' ? 'en-US' : loc;
+        const time = new Date().toLocaleTimeString(timeLocale, { hour12: false });
         logLines.push('[' + time + '] ' + text);
         if (logLines.length > 5) logLines = logLines.slice(-5);
         ui.log.textContent = logLines.join('\n');
@@ -417,17 +705,18 @@
     function clickTargetCard(target) {
         const aliases = target.aliases.slice().sort(function (a, b) { return b.length - a.length; });
         const cards = visibleSkillCards();
-        appendLog('可见技能卡 ' + cards.length + ' 张' + (cards.length ? '：' + cards.map(cardName).join('/') : ''));
+        const names = cards.map(cardName).join('/');
+        appendLog(t('visibleCards', { n: cards.length, list: cards.length ? '：' + names : '' }));
         for (const card of cards) {
             if (textHitsAlias(cardName(card), aliases)) {
-                appendLog('点击卡片：' + cardName(card));
+                appendLog(t('clickCard', { name: cardName(card) }));
                 return nativeClick(card);
             }
         }
         for (let i = 0; i < aliases.length; i++) {
             const el = findExactLabel(aliases[i]);
             if (el) {
-                appendLog('点击名称：' + aliases[i]);
+                appendLog(t('clickName', { alias: aliases[i] }));
                 return nativeClick(el);
             }
         }
@@ -494,7 +783,7 @@
         if (!config.infinite || !root) return;
         const input = root.querySelector('[class*="maxActionCountInput"] input, input[type="number"], input[type="text"]');
         if (input && (String(input.value).indexOf('\u221e') !== -1 || String(input.placeholder).indexOf('\u221e') !== -1)) {
-            appendLog('次数已是无限');
+            appendLog(t('alreadyInfinite'));
             return;
         }
         const chips = Array.from(root.querySelectorAll('button, [role="button"], div, span')).filter(function (el) {
@@ -504,7 +793,7 @@
         });
         if (chips.length) {
             if (!clickReactButton(chips[0])) nativeClick(chips[0]);
-            appendLog('已点无限次数');
+            appendLog(t('clickedInfinite'));
         }
     }
 
@@ -514,7 +803,7 @@
             || (modal && modal.querySelector('[class*="SkillActionDetail"]'))
             || document.querySelector('[class*="SkillActionDetail"]');
         const scope = root || detail || modal || document;
-        const labels = ['立即开始', '现在开始', '現在開始', 'Start Now', '开始', '開始', 'Go'];
+        const labels = ['立即开始', '立即開始', '现在开始', '現在開始', 'Start Now', '开始', '開始', 'Start', 'Go'];
         const nodes = Array.from(scope.querySelectorAll('button, [role="button"]'));
         let best = null;
         let bestRank = -1;
@@ -543,84 +832,84 @@
     function clickStart(root) {
         const btn = findStartButton(root);
         if (!btn) return false;
-        appendLog('点击按钮：' + controlText(btn) + ' (' + Math.round(btn.getBoundingClientRect().width) + 'px)');
+        appendLog(t('clickBtn', { text: controlText(btn), width: Math.round(btn.getBoundingClientRect().width) }));
         if (clickReactButton(btn)) {
-            appendLog('已用游戏按钮事件开始');
+            appendLog(t('usedGameClick'));
             return true;
         }
-        appendLog('未取到按钮事件，开始可能失败');
+        appendLog(t('noBtnEvent'));
         return false;
     }
 
     async function openTargetDialog(skill, target) {
         if (findStartButton() && panelShowsTarget(getDialog() || document.body, target)) {
-            appendLog('开始按钮已在正确弹窗上');
+            appendLog(t('startAlreadyOpen'));
             return true;
         }
 
         const core = getGameCore();
-        appendLog(core ? '已找到游戏核心' : '未找到游戏核心');
+        appendLog(core ? t('foundCore') : t('noCore'));
 
         if (core && typeof core.handleGoToAction === 'function' && target.hrid) {
             try {
                 core.handleGoToAction(target.hrid);
-                appendLog('已调用打开：' + target.label + ' ' + target.hrid);
+                appendLog(t('openedViaApi', { label: targetLabel(target), hrid: target.hrid }));
             } catch (e) {
-                appendLog('游戏打开接口报错');
+                appendLog(t('apiError'));
             }
             if (await waitFor(function () { return findStartButton(); }, 3500)) {
-                appendLog('已等到开始按钮');
+                appendLog(t('gotStart'));
                 return true;
             }
-            appendLog('接口已调用，但没出现开始按钮');
+            appendLog(t('apiNoStart'));
         }
 
         if (isOnSkillPage(skill)) {
-            appendLog('已在' + skill.label + '页');
+            appendLog(t('onSkillPage', { skill: skillLabel(skill) }));
         } else if (clickNavSkill(skill)) {
-            appendLog('已点侧栏：' + skill.label);
+            appendLog(t('clickedNav', { skill: skillLabel(skill) }));
             await waitFor(function () { return isOnSkillPage(skill); }, 3000);
             await sleep(250);
         } else {
-            appendLog('未点到侧栏「' + skill.label + '」');
+            appendLog(t('navMiss', { skill: skillLabel(skill) }));
         }
 
         if (core && typeof core.handleGoToAction === 'function' && target.hrid && !findStartButton()) {
             try { core.handleGoToAction(target.hrid); } catch (e2) {}
             if (await waitFor(function () { return findStartButton(); }, 2500)) {
-                appendLog('已等到开始按钮');
+                appendLog(t('gotStart'));
                 return true;
             }
         }
 
         if (!clickTargetCard(target)) {
-            throw new Error('未找到目标卡片：' + target.label);
+            throw new Error(t('errNoCard', { label: targetLabel(target) }));
         }
 
         const startBtn = await waitFor(function () { return findStartButton(); }, 4000);
         if (!startBtn) {
-            throw new Error('已点' + target.label + '，但没等到开始按钮');
+            throw new Error(t('errNoStartAfterClick', { label: targetLabel(target) }));
         }
-        appendLog('已等到开始按钮');
+        appendLog(t('gotStart'));
         return true;
     }
 
     async function startConfiguredAction() {
         const skill = currentSkill();
         const target = currentTarget();
-        appendLog('开始执行：' + skill.label + ' \u2192 ' + target.label);
+        appendLog(t('startAction', { skill: skillLabel(skill), target: targetLabel(target) }));
 
         await openTargetDialog(skill, target);
 
         const startBtn = findStartButton();
-        if (!startBtn) throw new Error('没有开始按钮');
+        if (!startBtn) throw new Error(t('errNoStart'));
         const dialog = startBtn.closest('[class*="MuiPaper"], [class*="Modal"], [class*="SkillActionDetail"], [class*="dialog"]') || startBtn.parentElement || document.body;
 
         ensureInfinite(dialog);
         await sleep(150);
 
         if (!clickStart(document)) {
-            throw new Error('找到过开始按钮但点击失败');
+            throw new Error(t('errStartClickFail'));
         }
 
         await sleep(CLICK_DELAY_MS);
@@ -632,7 +921,7 @@
             }
             await sleep(400);
         }
-        throw new Error('点了开始，但顶部仍是「' + getHeaderActionText() + '」，不是' + target.label);
+        throw new Error(t('errStillIdle', { header: getHeaderActionText(), label: targetLabel(target) }));
     }
 
     async function runOnce(reason, options) {
@@ -651,12 +940,12 @@
         running = true;
         lastReason = reason || 'manual';
         lastRunAt = Date.now();
-        setStatus('正在执行默认动作\u2026', '触发来源：' + lastReason);
+        setStatus(t('executing'), t('trigger', { reason: reasonText(lastReason) }));
         try {
             await startConfiguredAction();
-            setStatus('已开始：' + currentSkill().label + ' / ' + currentTarget().label, '执行成功');
+            setStatus(t('started', { skill: skillLabel(currentSkill()), target: targetLabel(currentTarget()) }), t('success'));
         } catch (err) {
-            setStatus('执行失败', String(err && err.message ? err.message : err));
+            setStatus(t('fail'), String(err && err.message ? err.message : err));
         } finally {
             running = false;
         }
@@ -666,59 +955,6 @@
         if (!config.enabled) return;
         const delay = document.hidden ? 0 : 250;
         setTimeout(function () { runOnce(reason); }, delay);
-    }
-
-    function looksLikeIdleNotice(title, body) {
-        return IDLE_NOTIFY_RE.test(String(title || '') + ' ' + String(body || ''));
-    }
-
-    function hookNotifications() {
-        try {
-            const OriginalNotification = window.Notification;
-            if (typeof OriginalNotification === 'function') {
-                const Wrapped = function (title, options) {
-                    if (config.hookNotification && looksLikeIdleNotice(title, options && options.body)) {
-                        scheduleIdleRun('page-notification');
-                    }
-                    return new OriginalNotification(title, options);
-                };
-                Wrapped.prototype = OriginalNotification.prototype;
-                try { Wrapped.permission = OriginalNotification.permission; } catch (e) {}
-                try { Wrapped.requestPermission = OriginalNotification.requestPermission.bind(OriginalNotification); } catch (e) {}
-                window.Notification = Wrapped;
-            }
-        } catch (e) {}
-
-        try {
-            const proto = window.ServiceWorkerRegistration && window.ServiceWorkerRegistration.prototype;
-            if (proto && proto.showNotification && !proto.__mwidleHooked) {
-                const original = proto.showNotification;
-                proto.showNotification = function (title, options) {
-                    if (config.hookNotification && looksLikeIdleNotice(title, options && options.body)) {
-                        scheduleIdleRun('sw-notification');
-                    }
-                    return original.apply(this, arguments);
-                };
-                proto.__mwidleHooked = true;
-            }
-        } catch (e) {}
-
-        const origLog = console.log;
-        console.log = function () {
-            try {
-                const joined = Array.prototype.slice.call(arguments).map(String).join(' ');
-                if (config.hookNotification && /notificate empty action|动作队列为空|Action queue is empty/i.test(joined)) {
-                    scheduleIdleRun('mwitools-log');
-                }
-            } catch (e) {}
-            return origLog.apply(console, arguments);
-        };
-
-        window.addEventListener('mwidle-idle', function () { scheduleIdleRun('custom-event'); });
-        try {
-            const channel = new BroadcastChannel('mwidle-idle');
-            channel.onmessage = function () { scheduleIdleRun('broadcast'); };
-        } catch (e) {}
     }
 
     function rememberActionIds(list) {
@@ -881,7 +1117,7 @@
         const style = document.createElement('style');
         style.id = 'mwidle-auto-gather-style';
         style.textContent = [
-            '#mwidle-auto-gather { position:fixed; right:16px; bottom:88px; z-index:999999; width:268px; color:#f2f4ff;',
+            '#mwidle-auto-gather { position:fixed; right:16px; bottom:88px; z-index:999999; width:300px; color:#f2f4ff;',
             'font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:rgba(22,24,48,.96);',
             'border:1px solid #5b63a8; border-radius:10px; box-shadow:0 10px 28px rgba(0,0,0,.35); user-select:none; }',
             '#mwidle-auto-gather * { box-sizing:border-box; }',
@@ -902,18 +1138,57 @@
         (document.head || document.documentElement).appendChild(style);
     }
 
-    function fillTargetSelect(select) {
-        const list = TARGETS[config.skill] || [];
+    function fillSelect(select, items, selected) {
         select.innerHTML = '';
-        list.forEach(function (item) {
+        items.forEach(function (item) {
             const opt = document.createElement('option');
-            opt.value = item.id;
+            opt.value = item.value;
             opt.textContent = item.label;
             select.appendChild(opt);
         });
-        const selected = config.targets[config.skill];
-        select.value = list.some(function (item) { return item.id === selected; }) ? selected : list[0].id;
-        config.targets[config.skill] = select.value;
+        const ok = items.some(function (item) { return item.value === selected; });
+        select.value = ok ? selected : (items[0] && items[0].value) || '';
+        return select.value;
+    }
+
+    function fillSkillSelect(select) {
+        fillSelect(select, [
+            { value: 'milking', label: t('skill.milking') },
+            { value: 'foraging', label: t('skill.foraging') },
+            { value: 'woodcutting', label: t('skill.woodcutting') }
+        ], config.skill);
+    }
+
+    function fillTargetSelect(select) {
+        const list = TARGETS[config.skill] || [];
+        const selected = fillSelect(select, list.map(function (item) {
+            return { value: item.id, label: t('target.' + config.skill + '.' + item.id) };
+        }), config.targets[config.skill]);
+        config.targets[config.skill] = selected;
+    }
+
+    function fillLocaleSelect(select) {
+        fillSelect(select, [
+            { value: 'auto', label: t('locale.auto') },
+            { value: 'en', label: t('locale.en') },
+            { value: 'zh-CN', label: t('locale.zh-CN') },
+            { value: 'zh-TW', label: t('locale.zh-TW') }
+        ], config.locale || 'auto');
+    }
+
+    function applyI18n() {
+        if (!ui.root) return;
+        const titleEl = ui.root.querySelector('.mw-hd b');
+        if (titleEl) titleEl.textContent = t('title') + ' v' + VERSION;
+        ui.root.querySelectorAll('[data-i18n]').forEach(function (el) {
+            el.textContent = t(el.getAttribute('data-i18n'));
+        });
+        fillSkillSelect(ui.root.querySelector('select[data-key="skill"]'));
+        fillTargetSelect(ui.root.querySelector('select[data-key="target"]'));
+        fillLocaleSelect(ui.root.querySelector('select[data-key="locale"]'));
+        const runBtn = ui.root.querySelector('[data-act="run"]');
+        if (runBtn && !runBtn.disabled) runBtn.textContent = t('run');
+        if (ui.status && lastStatus) ui.status.textContent = lastStatus;
     }
 
     function createPanel() {
@@ -923,23 +1198,19 @@
         root.id = 'mwidle-auto-gather';
         if (config.collapsed) root.classList.add('collapsed');
         root.innerHTML = [
-            '<div class="mw-hd"><b>空闲自动采集 v2.4.0</b><button type="button" data-act="toggle">',
+            '<div class="mw-hd"><b></b><button type="button" data-act="toggle">',
             config.collapsed ? '+' : '\u2013',
             '</button></div>',
             '<div class="mw-bd">',
-            '<label><input type="checkbox" data-key="enabled"> 启用（无所事事时自动执行）</label>',
-            '<div><div>动作</div><select data-key="skill">',
-            '<option value="milking">挤奶</option>',
-            '<option value="foraging">采集</option>',
-            '<option value="woodcutting">伐木</option>',
-            '</select></div>',
-            '<div><div>目标</div><select data-key="target"></select></div>',
-            '<label><input type="checkbox" data-key="infinite"> 无限次数 [\u221e]</label>',
-            '<label><input type="checkbox" data-key="hookNotification"> 挂钩空闲通知 / MWITools</label>',
-            '<label><input type="checkbox" data-key="keepalive"> 后台保活（离开页面也能自动开始）</label>',
-            '<button type="button" class="mw-btn" data-act="run">立即执行一次</button>',
+            '<label><input type="checkbox" data-key="enabled"> <span data-i18n="enable"></span></label>',
+            '<div><div data-i18n="language"></div><select data-key="locale"></select></div>',
+            '<div><div data-i18n="skill"></div><select data-key="skill"></select></div>',
+            '<div><div data-i18n="target"></div><select data-key="target"></select></div>',
+            '<label><input type="checkbox" data-key="infinite"> <span data-i18n="infinite"></span></label>',
+            '<label><input type="checkbox" data-key="keepalive"> <span data-i18n="keepalive"></span></label>',
+            '<button type="button" class="mw-btn" data-act="run"></button>',
             '<div class="mw-status"></div><div class="mw-log"></div>',
-            '<div class="mw-tip">后台标签会被浏览器节流。请勾选「后台保活」，并在游戏页点击一次。脚本会监听动作完成，不必切回页面。</div>',
+            '<div class="mw-tip" data-i18n="tip"></div>',
             '</div>'
         ].join('');
         document.body.appendChild(root);
@@ -949,24 +1220,31 @@
 
         const skillSelect = root.querySelector('select[data-key="skill"]');
         const targetSelect = root.querySelector('select[data-key="target"]');
-        skillSelect.value = config.skill;
-        fillTargetSelect(targetSelect);
+        const localeSelect = root.querySelector('select[data-key="locale"]');
+        applyI18n();
         root.querySelector('input[data-key="enabled"]').checked = config.enabled;
         root.querySelector('input[data-key="infinite"]').checked = config.infinite;
-        root.querySelector('input[data-key="hookNotification"]').checked = config.hookNotification;
         root.querySelector('input[data-key="keepalive"]').checked = config.keepalive;
+        lastStatus = lastStatus || t('waitLoad');
         setStatus(lastStatus);
 
+        localeSelect.addEventListener('change', function () {
+            config.locale = localeSelect.value;
+            invalidateLocale();
+            saveConfig();
+            applyI18n();
+            setStatus(t('saved', { skill: skillLabel(currentSkill()), target: targetLabel(currentTarget()) }));
+        });
         skillSelect.addEventListener('change', function () {
             config.skill = skillSelect.value;
             fillTargetSelect(targetSelect);
             saveConfig();
-            setStatus('已保存：' + currentSkill().label + ' / ' + currentTarget().label);
+            setStatus(t('saved', { skill: skillLabel(currentSkill()), target: targetLabel(currentTarget()) }));
         });
         targetSelect.addEventListener('change', function () {
             config.targets[config.skill] = targetSelect.value;
             saveConfig();
-            setStatus('已保存：' + currentSkill().label + ' / ' + currentTarget().label);
+            setStatus(t('saved', { skill: skillLabel(currentSkill()), target: targetLabel(currentTarget()) }));
         });
         Array.prototype.forEach.call(root.querySelectorAll('input[type="checkbox"]'), function (input) {
             input.addEventListener('change', function () {
@@ -985,12 +1263,12 @@
         root.querySelector('[data-act="run"]').addEventListener('click', async function (ev) {
             const btn = ev.currentTarget;
             btn.disabled = true;
-            btn.textContent = '执行中\u2026';
+            btn.textContent = t('running');
             try {
                 await runOnce('manual', { force: true });
             } finally {
                 btn.disabled = false;
-                btn.textContent = '立即执行一次';
+                btn.textContent = t('run');
             }
         });
 
@@ -1010,6 +1288,14 @@
             root.style.bottom = 'auto';
         });
         document.addEventListener('mouseup', function () { drag = null; });
+
+        setTimeout(function () {
+            if ((config.locale || 'auto') !== 'auto') return;
+            const inferred = inferLocaleFromGame();
+            if (!inferred || inferred === getLocale()) return;
+            invalidateLocale();
+            applyI18n();
+        }, 2500);
     }
 
     function onReady(fn) {
@@ -1017,8 +1303,8 @@
         else document.addEventListener('DOMContentLoaded', fn, { once: true });
     }
 
+    lastStatus = t('waitLoad');
     hookWebSocket();
-    hookNotifications();
     saveConfig();
     onReady(function () {
         createPanel();
