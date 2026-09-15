@@ -12,8 +12,8 @@
 // @run-at       document-start
 // @noframes
 // @license      MIT
-// @downloadURL  https://raw.githubusercontent.com/Jireh012/mwi-userscripts/main/scripts/mw-idle-auto-gather.user.js
-// @updateURL    https://raw.githubusercontent.com/Jireh012/mwi-userscripts/main/scripts/mw-idle-auto-gather.user.js
+// @downloadURL  https://raw.githubusercontent.com/Jireh012/userscripts/main/scripts/mw-idle-auto-gather.user.js
+// @updateURL    https://raw.githubusercontent.com/Jireh012/userscripts/main/scripts/mw-idle-auto-gather.user.js
 // ==/UserScript==
 
 (function () {
