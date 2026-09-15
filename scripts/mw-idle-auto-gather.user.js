@@ -1,16 +1,16 @@
 // ==UserScript==
-// @name         MW Idle Auto Triple Gather
-// @name:en      MW Idle Auto Triple Gather
+// @name         MW Idle 空闲自动三采
 // @name:zh      MW Idle 空闲自动三采
 // @name:zh-CN   MW Idle 空闲自动三采
 // @name:zh-TW   MW Idle 空閒自動三採
+// @name:en      MW Idle Auto Triple Gather
 // @namespace    mwidle-auto
-// @version      2.5.0
-// @description  When idle, auto-start a chosen gathering action (Milking / Foraging / Woodcutting) and target.
-// @description:en  When idle, auto-start a chosen gathering action (Milking / Foraging / Woodcutting) and target.
+// @version      2.5.1
+// @description  无所事事时自动执行自选三采动作（挤奶/采集/伐木）和目标。界面支持简体、繁体、English。
 // @description:zh  无所事事时自动执行自选三采动作（挤奶/采集/伐木）和目标。界面支持简体、繁体、English。
 // @description:zh-CN 无所事事时自动执行自选三采动作（挤奶/采集/伐木）和目标。界面支持简体、繁体、English。
 // @description:zh-TW 無所事事時自動執行自選三採動作（擠奶/採集/伐木）和目標。介面支援簡體、繁體、English。
+// @description:en  When idle, auto-start a chosen gathering action (Milking / Foraging / Woodcutting) and target.
 // @author       based on Jireh
 // @match        https://www.milkywayidle.com/*
 // @match        https://test.milkywayidle.com/*
@@ -27,7 +27,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '2.5.0';
+    const VERSION = '2.5.1';
     const STORAGE_KEY = 'mwidle-auto-gather-config-v2';
     const CLICK_DELAY_MS = 900;
     const RUN_COOLDOWN_MS = 8000;
@@ -333,7 +333,7 @@
         observeIdle: true,
         keepalive: true,
         collapsed: false,
-        locale: 'auto'
+        locale: 'zh-CN'
     };
 
     let config = loadConfig();
@@ -362,7 +362,7 @@
                 merged.keepalive = true;
                 merged.bgKeepaliveMigrated = true;
             }
-            if (!merged.locale) merged.locale = 'auto';
+            if (!merged.locale) merged.locale = 'zh-CN';
             return merged;
         } catch (e) {
             return { ...DEFAULT_CONFIG, targets: { ...DEFAULT_CONFIG.targets } };
@@ -393,7 +393,7 @@
     }
 
     function resolveLocale() {
-        const pref = (config && config.locale) || 'auto';
+        const pref = (config && config.locale) || 'zh-CN';
         if (LOCALES.indexOf(pref) !== -1) return pref;
         const fromGame = inferLocaleFromGame();
         if (fromGame) return fromGame;
@@ -410,7 +410,7 @@
             return 'zh-TW';
         }
         if (lang.indexOf('zh') === 0) return 'zh-CN';
-        return 'en';
+        return 'zh-CN';
     }
 
     function getLocale() {
@@ -1173,7 +1173,7 @@
             { value: 'en', label: t('locale.en') },
             { value: 'zh-CN', label: t('locale.zh-CN') },
             { value: 'zh-TW', label: t('locale.zh-TW') }
-        ], config.locale || 'auto');
+        ], config.locale || 'zh-CN');
     }
 
     function applyI18n() {
